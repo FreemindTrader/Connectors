@@ -6,6 +6,7 @@
     <ProjectReference Include="..\Aevo\Aevo.csproj" />
     <ProjectReference Include="..\AlorHistory\AlorHistory.csproj" />
     <ProjectReference Include="..\Alpaca\Alpaca.csproj" />
+    <ProjectReference Include="..\AlphaVantage\AlphaVantage.csproj" />
     <ProjectReference Include="..\LMAX\LMAX.csproj" />
 	<ProjectReference Include="..\AltCoinTrader\AltCoinTrader.csproj" />
     <ProjectReference Include="..\ApexOmni\ApexOmni.csproj" />
@@ -17,6 +18,7 @@
     <ProjectReference Include="..\Bcs\Bcs.csproj" />
     <ProjectReference Include="..\Bigul\Bigul.csproj" />
     <ProjectReference Include="..\Binance\Binance.csproj" />
+    <ProjectReference Include="..\BinanceHistory\BinanceHistory.csproj" />
     <ProjectReference Include="..\BingX\BingX.csproj" />
 	<ProjectReference Include="..\BigOne\BigOne.csproj" />
 	<ProjectReference Include="..\Bit2Me\Bit2Me.csproj" />
@@ -39,6 +41,7 @@
 	<ProjectReference Include="..\Buda\Buda.csproj" />
     <ProjectReference Include="..\BTSE\BTSE.csproj" />
     <ProjectReference Include="..\ByBit\ByBit.csproj" />
+    <ProjectReference Include="..\ByBitHistory\ByBitHistory.csproj" />
     <ProjectReference Include="..\BYDFi\BYDFi.csproj" />
 	<ProjectReference Include="..\Chainflip\Chainflip.csproj" />
     <ProjectReference Include="..\Cetus\Cetus.csproj" />
@@ -114,6 +117,7 @@
     <ProjectReference Include="..\FXOpen\FXOpen.csproj" />
     <ProjectReference Include="..\GainsNetwork\GainsNetwork.csproj" />
     <ProjectReference Include="..\GateIO\GateIO.csproj" />
+    <ProjectReference Include="..\GateIOHistory\GateIOHistory.csproj" />
     <ProjectReference Include="..\Gemini\Gemini.csproj" />
     <ProjectReference Include="..\GmoCoin\GmoCoin.csproj" />
     <ProjectReference Include="..\GMTrade\GMTrade.csproj" />
@@ -129,12 +133,14 @@
     <ProjectReference Include="..\Indodax\Indodax.csproj" />
     <ProjectReference Include="..\Injective\Injective.csproj" />
     <ProjectReference Include="..\Intrinio\Intrinio.csproj" />
+    <ProjectReference Include="..\IQFeed\IQFeed.csproj" />
     <ProjectReference Include="..\Jainam\Jainam.csproj" />
     <ProjectReference Include="..\Jupiter\Jupiter.csproj" />
     <ProjectReference Include="..\Kalshi\Kalshi.csproj" />
     <ProjectReference Include="..\Korbit\Korbit.csproj" />
     <ProjectReference Include="..\Kraken\Kraken.csproj" />
     <ProjectReference Include="..\Kucoin\Kucoin.csproj" />
+    <ProjectReference Include="..\KucoinHistory\KucoinHistory.csproj" />
     <ProjectReference Include="..\Latoken\Latoken.csproj" />
     <ProjectReference Include="..\LBank\LBank.csproj" />
     <ProjectReference Include="..\Lfj\Lfj.csproj" />
@@ -168,6 +174,7 @@
 	<ProjectReference Include="..\Pendle\Pendle.csproj" />
     <ProjectReference Include="..\Phemex\Phemex.csproj" />
     <ProjectReference Include="..\Pionex\Pionex.csproj" />
+    <ProjectReference Include="..\PolygonIO\PolygonIO.csproj" />
     <ProjectReference Include="..\Polymarket\Polymarket.csproj" />
     <ProjectReference Include="..\Public\Public.csproj" />
     <ProjectReference Include="..\PumpSwap\PumpSwap.csproj" />
@@ -175,6 +182,7 @@
 	<ProjectReference Include="..\Quidax\Quidax.csproj" />
     <ProjectReference Include="..\Raydium\Raydium.csproj" />
     <ProjectReference Include="..\Reya\Reya.csproj" />
+    <ProjectReference Include="..\Rss\Rss.csproj" />
     <ProjectReference Include="..\Rupeezy\Rupeezy.csproj" />
     <ProjectReference Include="..\StandX\StandX.csproj" />
     <ProjectReference Include="..\StocksTrader\StocksTrader.csproj" />
@@ -199,6 +207,9 @@
 	<ProjectReference Include="..\ZondaCrypto\ZondaCrypto.csproj" />
     <ProjectReference Include="..\Zoomex\Zoomex.csproj" />
     <ProjectReference Include="..\Fix\Fix.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Common\S3BucketHelper.cs" Link="S3BucketHelper.cs" />
   </ItemGroup>
   <ItemGroup>
 	<PackageReference Include="TonSdk.Core" Version="$(TonSdkCoreVer)" />
