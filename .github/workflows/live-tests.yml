@@ -1,0 +1,67 @@
+name: Live tests
+
+# The checks that talk to real venues and archives. Kept off every push: they depend on third
+# party uptime and rate limits, and several venues refuse cloud addresses. Run nightly and on
+# demand, so a venue that changed its answers shows up within a day without reddening each commit.
+# The keys come from the repository's secrets; a check whose key is missing reports itself
+# inconclusive and names the variable.
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      STOCKSHARP_LIVE_TESTS: '1'
+      ALPHAVANTAGE_TOKEN: ${{ secrets.ALPHAVANTAGE_TOKEN }}
+      POLYGON_TOKEN: ${{ secrets.POLYGON_TOKEN }}
+
+    steps:
+      # The connector projects import "../StockSharp (GitHub)/props/common_target_net.props", so both
+      # repos sit side by side, the StockSharp folder named exactly "StockSharp (GitHub)".
+      - name: Checkout Connectors
+        uses: actions/checkout@v7
+        with:
+          path: Connectors
+
+      - name: Checkout StockSharp
+        uses: actions/checkout@v7
+        with:
+          repository: StockSharp/StockSharp
+          path: 'StockSharp (GitHub)'
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            6.0.x
+            10.0.x
+
+      - name: Build
+        working-directory: Connectors
+        run: dotnet build Connectors.slnx --configuration Release
+
+      # One at a time: run side by side, the venues answer a burst from one address with timeouts
+      # and rate limits instead of data.
+      - name: Run live tests
+        working-directory: Connectors
+        run: >
+          dotnet test Tests/Tests.csproj
+          --no-build
+          --configuration Release
+          --filter "TestCategory=Integration"
+          --logger "trx;LogFileName=live-tests.trx"
+          --results-directory TestResults
+          -- MSTest.Parallelize.Workers=1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-test-results
+          path: Connectors/TestResults/*.trx
+          if-no-files-found: warn

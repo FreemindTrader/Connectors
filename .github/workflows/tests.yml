@@ -23,12 +23,12 @@ jobs:
       # reference Messages.csproj and Media.Names.csproj from there, so both repos must sit
       # side by side and the StockSharp folder must be named exactly "StockSharp (GitHub)".
       - name: Checkout Connectors
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: Connectors
 
       - name: Checkout StockSharp
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: StockSharp/StockSharp
           path: 'StockSharp (GitHub)'
@@ -37,13 +37,13 @@ jobs:
       # checkout exists. Without it the test falls back to fetching 275 pages over HTTP,
       # which is slow and depends on the live site being up.
       - name: Checkout doc
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: StockSharp/doc
           path: doc
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             6.0.x
@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: Connectors/TestResults/*.trx
