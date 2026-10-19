@@ -8,6 +8,8 @@ using Ecng.IO.Compression;
 using Ecng.Serialization;
 using Ecng.Logging;
 
+using Newtonsoft.Json.Linq;
+
 using StockSharp.Connectors.Common;
 
 public partial class BinanceHistoryMessageAdapter
@@ -15,8 +17,10 @@ public partial class BinanceHistoryMessageAdapter
 	private const string _bucketName = "data.binance.vision";
 	private const string _bucketRegion = "ap-northeast-1";
 	private const string _s3BaseUrl = "https://s3.ap-northeast-1.amazonaws.com/data.binance.vision/";
+	private const string _coinExchangeInfoUrl = "https://dapi.binance.com/dapi/v1/exchangeInfo";
 
 	private readonly SynchronizedDictionary<string, (DateTime till, (DateTime, DateTime)? range)> _rangeCache = new(StringComparer.InvariantCultureIgnoreCase);
+	private readonly SynchronizedDictionary<string, decimal> _contractSizes = new(StringComparer.InvariantCultureIgnoreCase);
 	private readonly HttpClient _client = new();
 
 	/// <inheritdoc />
@@ -32,7 +36,7 @@ public partial class BinanceHistoryMessageAdapter
 		{
 			{ "https://api.binance.com/api/v3/exchangeInfo", (SecurityTypes.CryptoCurrency, BoardCodes.Binance) },
 			{ "https://fapi.binance.com/fapi/v1/exchangeInfo", (SecurityTypes.Future, BoardCodes.BinanceFut) },
-			{ "https://dapi.binance.com/dapi/v1/exchangeInfo", (SecurityTypes.Future, BoardCodes.BinanceCoin) }
+			{ _coinExchangeInfoUrl, (SecurityTypes.Future, BoardCodes.BinanceCoin) }
 		};
 
 		foreach (var endpoint in endpoints)
@@ -40,47 +44,37 @@ public partial class BinanceHistoryMessageAdapter
 			if (!secTypes.IsEmpty() && !secTypes.Contains(endpoint.Value.type))
 				continue;
 
-			try
-			{
-				var response = await _client.GetStringAsync(endpoint.Key, token);
-				dynamic exchangeInfo = response.DeserializeObject<object>();
+			var response = await _client.GetStringAsync(endpoint.Key, token);
+			dynamic exchangeInfo = response.DeserializeObject<object>();
 
-				foreach (var item in exchangeInfo.symbols)
+			foreach (var item in exchangeInfo.symbols)
+			{
+				token.ThrowIfCancellationRequested();
+
+				var symbol = (string)item.symbol;
+
+				if (!secCodeLike.IsEmpty() && !symbol.ContainsIgnoreCase(secCodeLike))
+					continue;
+
+				var secMsg = new SecurityMessage
 				{
-					token.ThrowIfCancellationRequested();
-
-					var symbol = (string)item.symbol;
-
-					if (!secCodeLike.IsEmpty() && !symbol.ContainsIgnoreCase(secCodeLike))
-						continue;
-
-					var secMsg = new SecurityMessage
+					SecurityId = new()
 					{
-						SecurityId = new()
-						{
-							SecurityCode = symbol,
-							BoardCode = endpoint.Value.board,
-						},
-						SecurityType = endpoint.Value.type,
-						OriginalTransactionId = lookupMsg.TransactionId,
-						Decimals = (int?)item.quoteAssetPrecision,
-					}.TryFillUnderlyingId((string)item.baseAsset);
+						SecurityCode = symbol,
+						BoardCode = endpoint.Value.board,
+					},
+					SecurityType = endpoint.Value.type,
+					OriginalTransactionId = lookupMsg.TransactionId,
+					Decimals = (int?)item.quoteAssetPrecision,
+				}.TryFillUnderlyingId((string)item.baseAsset);
 
-					if (!secMsg.IsMatch(lookupMsg, secTypes))
-						continue;
+				if (!secMsg.IsMatch(lookupMsg, secTypes))
+					continue;
 
-					await SendOutMessageAsync(secMsg, token);
+				await SendOutMessageAsync(secMsg, token);
 
-					if (--left <= 0)
-						break;
-				}
-			}
-			catch (Exception ex)
-			{
-				if (token.IsCancellationRequested)
+				if (--left <= 0)
 					break;
-
-				this.AddErrorLog(ex);
 			}
 
 			if (left <= 0)
@@ -342,6 +336,8 @@ public partial class BinanceHistoryMessageAdapter
 		var secCode = mdMsg.SecurityId.SecurityCode;
 		var section = mdMsg.GetSection();
 		var prefix = $"data/{section}/daily/bookDepth/{secCode}/{secCode}-bookDepth-";
+		var inverse = mdMsg.SecurityId.BoardCode == BoardCodes.BinanceCoin;
+		var contractSize = inverse ? await GetCoinContractSize(secCode, cancellationToken) : 1m;
 
 		var to2 = to;
 		var from2 = from;
@@ -363,20 +359,55 @@ public partial class BinanceHistoryMessageAdapter
 		foreach (var date in from2.Date.Range(to2.Date, TimeSpan.FromDays(1)))
 		{
 			var timestamp = default(DateTime?);
-			var bids = new List<QuoteChange>();
-			var asks = new List<QuoteChange>();
+			var bids = new List<(decimal percentage, decimal depth, decimal notional)>();
+			var asks = new List<(decimal percentage, decimal depth, decimal notional)>();
+
+			QuoteChange[] ConvertBands(List<(decimal percentage, decimal depth, decimal notional)> bands, bool isBid)
+			{
+				var quotes = new List<QuoteChange>();
+				var previousDepth = 0m;
+				var previousNotional = 0m;
+
+				foreach (var band in bands.OrderBy(b => b.percentage.Abs()))
+				{
+					var volume = band.depth - previousDepth;
+					var notional = band.notional - previousNotional;
+					previousDepth = band.depth;
+					previousNotional = band.notional;
+
+					if (volume == 0 && notional == 0)
+						continue;
+
+					if (volume <= 0 || notional <= 0)
+						throw new InvalidDataException($"Invalid cumulative depth for {secCode} at {timestamp:O}, band {band.percentage}.");
+
+					quotes.Add(new QuoteChange
+					{
+						Volume = volume,
+						Price = inverse ? volume * contractSize / notional : notional / volume,
+					});
+				}
+
+				return [.. isBid ? quotes.OrderByDescending(q => q.Price) : quotes.OrderBy(q => q.Price)];
+			}
 
 			async ValueTask<bool> trySendQuotes()
 			{
 				if (bids.Count == 0 && asks.Count == 0)
 					return true;
 
+				var bidQuotes = ConvertBands(bids, true);
+				var askQuotes = ConvertBands(asks, false);
+
+				if (bidQuotes.Length > 0 && askQuotes.Length > 0 && bidQuotes[0].Price >= askQuotes[0].Price)
+					throw new InvalidDataException($"Crossed depth bands for {secCode} at {timestamp:O} in {prefix}{date:yyyy-MM-dd}.zip.");
+
 				await SendOutMessageAsync(new QuoteChangeMessage
 				{
 					OriginalTransactionId = transId,
 					ServerTime = timestamp.Value,
-					Bids = [.. bids.OrderByDescending(q => q.StartPosition)],
-					Asks = [.. asks.OrderBy(q => q.StartPosition)],
+					Bids = bidQuotes,
+					Asks = askQuotes,
 				}, cancellationToken);
 
 				bids.Clear();
@@ -404,20 +435,12 @@ public partial class BinanceHistoryMessageAdapter
 						return false;
 				}
 
-				// format: timestamp,percentage,depth,notional
-				// price = notional / depth (average price within percentage band)
-				var percentage = reader.ReadInt();
+				// Depth and notional are cumulative from the mid-price to the percentage boundary.
+				var percentage = reader.ReadDecimal();
 				var depth = reader.ReadDecimal();
 				var notional = reader.ReadDecimal();
 
-				var quote = new QuoteChange
-				{
-					StartPosition = percentage,
-					Volume = depth,
-					Price = depth != 0 ? notional / depth : 0,
-				};
-
-				(quote.StartPosition > 0 ? asks : bids).Add(quote);
+				(percentage > 0 ? asks : bids).Add((percentage, depth, notional));
 
 				timestamp = time;
 
@@ -435,6 +458,24 @@ public partial class BinanceHistoryMessageAdapter
 		}
 
 		await SendSubscriptionFinishedAsync(mdMsg.TransactionId, cancellationToken);
+	}
+
+	private async Task<decimal> GetCoinContractSize(string symbol, CancellationToken cancellationToken)
+	{
+		if (_contractSizes.TryGetValue(symbol, out var size))
+			return size;
+
+		var info = (await _client.GetStringAsync(_coinExchangeInfoUrl, cancellationToken)).DeserializeObject<JObject>();
+
+		foreach (var contract in info["symbols"] ?? throw new InvalidDataException("Missing COIN-M contract specifications."))
+		{
+			if ((decimal?)contract["contractSize"] is > 0 and var contractSize)
+				_contractSizes[(string)contract["symbol"]] = contractSize;
+		}
+
+		return _contractSizes.TryGetValue(symbol, out size)
+			? size
+			: throw new InvalidDataException($"Missing COIN-M contract size for {symbol}.");
 	}
 
 	private async ValueTask<(DateTime min, DateTime max)?> GetRange(string prefix, CancellationToken cancellationToken)

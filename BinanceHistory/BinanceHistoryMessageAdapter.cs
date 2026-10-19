@@ -25,6 +25,7 @@ public partial class BinanceHistoryMessageAdapter
 	protected override ValueTask ResetAsync(ResetMessage msg, CancellationToken token)
 	{
 		_rangeCache.Clear();
+		_contractSizes.Clear();
 		return base.ResetAsync(msg, token);
 	}
 }

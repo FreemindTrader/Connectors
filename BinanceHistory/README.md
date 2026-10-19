@@ -6,7 +6,8 @@ The **Binance Historical Data connector** imports public Binance market-data arc
 
 - Coverage for digital-asset spot and derivatives markets.
 - Instrument discovery and contract reference data.
-- Historical Level 1 quotes, tick trades, order books, and time-frame candles.
+- Historical Level 1 quotes, tick trades, aggregated depth bands, and time-frame candles.
+- Depth bands are converted to volume-weighted price buckets rather than individual exchange price levels. COIN-M prices use the contract size from exchange specifications. Inconsistent or crossed archive data is rejected.
 - Date-range downloads suitable for automated market-data backfilling.
 - This adapter is intended for historical data and does not provide live subscriptions or order routing.
 - Binance archive formats and identifiers are normalized behind the standard StockSharp API.
