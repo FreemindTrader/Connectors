@@ -74,79 +74,70 @@ partial class ByBitHistoryMessageAdapter
 			if (!secTypes.IsEmpty() && !secTypes.Contains(secTypeDefault))
 				continue;
 
-			try
-			{
-				var url = $"{_bybitApi}/v5/market/instruments-info?category={category}";
-				var json = await _client.GetStringAsync(url, token);
-				dynamic doc = json.DeserializeObject<object>();
+			var url = $"{_bybitApi}/v5/market/instruments-info?category={category}";
+			var json = await _client.GetStringAsync(url, token);
+			dynamic doc = json.DeserializeObject<object>();
 
-				if ((string)doc.retCode != "0" && (int)doc.retCode != 0)
+			if ((int)doc.retCode != 0)
+				throw new InvalidOperationException($"Bybit API {doc.retCode}: {doc.retMsg}");
+
+			foreach (var item in doc.result.list)
+			{
+				token.ThrowIfCancellationRequested();
+
+				var symbol = (string)item.symbol;
+
+				if (!secCodeLike.IsEmpty() && !symbol.ContainsIgnoreCase(secCodeLike))
 					continue;
 
-				foreach (var item in doc.result.list)
+				var tickSize = ((string)item.priceFilter?.tickSize)?.To<decimal?>();
+				var qtyStep  = ((string)item.lotSizeFilter?.qtyStep)?.To<decimal?>();
+				var minQty   = ((string)item.lotSizeFilter?.minOrderQty)?.To<decimal?>();
+
+				SecurityTypes secType = secTypeDefault;
+				DateTime? issue = null;
+				DateTime? expiry = null;
+
+				if (!category.EqualsIgnoreCase("spot"))
 				{
-					token.ThrowIfCancellationRequested();
+					string contractType = item.contractType;
+					if (!contractType.IsEmpty() && contractType.ContainsIgnoreCase("Perpetual"))
+						secType = SecurityTypes.Swap;
 
-					var symbol = (string)item.symbol;
+					var launchTime = ((string)item.launchTime)?.To<long?>();
+					var deliveryTime = ((string)item.deliveryTime)?.To<long?>() ?? ((string)item.settleTime)?.To<long?>();
 
-					if (!secCodeLike.IsEmpty() && !symbol.ContainsIgnoreCase(secCodeLike))
-						continue;
-
-					var tickSize = ((string)item.priceFilter?.tickSize)?.To<decimal?>();
-					var qtyStep  = ((string)item.lotSizeFilter?.qtyStep)?.To<decimal?>();
-					var minQty   = ((string)item.lotSizeFilter?.minOrderQty)?.To<decimal?>();
-
-					SecurityTypes secType = secTypeDefault;
-					DateTime? issue = null;
-					DateTime? expiry = null;
-
-					if (!category.EqualsIgnoreCase("spot"))
-					{
-						string contractType = item.contractType;
-						if (!contractType.IsEmpty() && contractType.ContainsIgnoreCase("Perpetual"))
-							secType = SecurityTypes.Swap;
-
-						var launchTime = ((string)item.launchTime)?.To<long?>();
-						var deliveryTime = ((string)item.deliveryTime)?.To<long?>() ?? ((string)item.settleTime)?.To<long?>();
-
-						if (launchTime is { } lt)
-							issue = lt.FromNative();
-						if (deliveryTime is { } et && et > 0)
-							expiry = et.FromNative();
-					}
-					else
-					{
-						var launchTime = ((string)item.launchTime)?.To<long?>();
-						if (launchTime is { } lt)
-							issue = lt.FromNative();
-					}
-
-					var secMsg = new SecurityMessage
-					{
-						SecurityId = new() { SecurityCode = symbol, BoardCode = boardCode },
-						SecurityType = secType,
-						OriginalTransactionId = lookupMsg.TransactionId,
-						PriceStep = tickSize,
-						MinVolume = minQty,
-						VolumeStep = qtyStep,
-						IssueDate = issue,
-						ExpiryDate = expiry,
-					};
-
-					if (!secMsg.IsMatch(lookupMsg, secTypes))
-						continue;
-
-					await SendOutMessageAsync(secMsg, token);
-
-					if (--left <= 0)
-						break;
+					if (launchTime is { } lt)
+						issue = lt.FromNative();
+					if (deliveryTime is { } et && et > 0)
+						expiry = et.FromNative();
 				}
-			}
-			catch (Exception ex)
-			{
-				if (token.IsCancellationRequested)
+				else
+				{
+					var launchTime = ((string)item.launchTime)?.To<long?>();
+					if (launchTime is { } lt)
+						issue = lt.FromNative();
+				}
+
+				var secMsg = new SecurityMessage
+				{
+					SecurityId = new() { SecurityCode = symbol, BoardCode = boardCode },
+					SecurityType = secType,
+					OriginalTransactionId = lookupMsg.TransactionId,
+					PriceStep = tickSize,
+					MinVolume = minQty,
+					VolumeStep = qtyStep,
+					IssueDate = issue,
+					ExpiryDate = expiry,
+				};
+
+				if (!secMsg.IsMatch(lookupMsg, secTypes))
+					continue;
+
+				await SendOutMessageAsync(secMsg, token);
+
+				if (--left <= 0)
 					break;
-				this.AddErrorLog(ex);
 			}
 
 			if (left <= 0)
