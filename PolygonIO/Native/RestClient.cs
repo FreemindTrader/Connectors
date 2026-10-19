@@ -8,9 +8,10 @@ class RestClient : RestBaseApiClient
 	private DateTime? _lastCallTime;
 
 	public RestClient(HttpClient http, string domain)
-		: base(http, new JsonMediaTypeFormatter(), new JsonMediaTypeFormatter())
+		: base(http, new NewtonsoftMediaTypeFormatter(), new NewtonsoftMediaTypeFormatter())
 	{
 		BaseAddress = $"https://api.{domain}".To<Uri>();
+		ExtractBadResponse = true;
 	}
 
 	private async Task<Response<T>> Do<T>(TimeSpan delay, Uri url, CancellationToken cancellationToken)
@@ -26,9 +27,9 @@ class RestClient : RestBaseApiClient
 		{
 			return await DoAsync<Response<T>>(HttpMethod.Get, url, default, cancellationToken);
 		}
-		catch (Exception ex)
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 		{
-			throw new InvalidOperationException($"Error download '{url}'.", ex);
+			throw new InvalidOperationException($"Error downloading '{url.GetLeftPart(UriPartial.Path)}'.", ex);
 		}
 	}
 
@@ -159,6 +160,9 @@ class RestClient : RestBaseApiClient
 	{
 		while (true)
 		{
+			if (!response.Status.IsEmpty() && !response.Status.EqualsIgnoreCase("OK") && !response.Status.EqualsIgnoreCase("DELAYED"))
+				throw new InvalidOperationException($"{response.Status}: {response.Error ?? response.Message}");
+
 			if (response.Results is null)
 				break;
 

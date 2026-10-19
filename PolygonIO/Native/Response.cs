@@ -8,6 +8,12 @@ class Response<T>
 	[JsonProperty("status")]
 	public string Status { get; set; }
 
+	[JsonProperty("error")]
+	public string Error { get; set; }
+
+	[JsonProperty("message")]
+	public string Message { get; set; }
+
 	[JsonProperty("request_id")]
 	public string RequestId { get; set; }
 
