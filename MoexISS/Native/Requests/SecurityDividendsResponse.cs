@@ -2,6 +2,6 @@
 
 class SecurityDividendsResponse
 {
-	[JsonProperty("dividends")]
+	[JsonProperty("dividends", Required = Required.Always)]
 	public IssResponsePayload Dividends { get; set; }
 }
