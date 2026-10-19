@@ -22,11 +22,15 @@ using StockSharp.Messages;
 [TestCategory("Integration")]
 public abstract class LiveMarketDataTestBase : BaseTestClass
 {
-	/// <inheritdoc />
-	protected override bool SkipInCI => true;
-
-	/// <inheritdoc />
-	protected override string SkipInCIReason => "Live market data tests are not run in CI.";
+	/// <summary>
+	/// Requires explicit opt-in on local machines and CI runners.
+	/// </summary>
+	[TestInitialize]
+	public void InitializeLiveTests()
+	{
+		if (!Env("STOCKSHARP_LIVE_TESTS").EqualsIgnoreCase("1"))
+			Inconclusive("Set STOCKSHARP_LIVE_TESTS=1 for live API tests.");
+	}
 
 	/// <summary>
 	/// Create the adapter under test. Credentials must not be required.
@@ -164,7 +168,7 @@ public abstract class LiveMarketDataTestBase : BaseTestClass
 	}
 
 	[TestMethod]
-	[Timeout(120000)]
+	[Timeout(120000, CooperativeCancellation = true)]
 	public Task Securities() => RunAsync(async harness =>
 	{
 		var result = await harness.LookupSecuritiesAsync(SecuritiesLimit,
@@ -188,7 +192,7 @@ public abstract class LiveMarketDataTestBase : BaseTestClass
 	});
 
 	[TestMethod]
-	[Timeout(120000)]
+	[Timeout(120000, CooperativeCancellation = true)]
 	public Task Level1() => RunAsync(async harness =>
 	{
 		if (!await IsSupportedAsync(harness, DataType.Level1))
@@ -203,7 +207,7 @@ public abstract class LiveMarketDataTestBase : BaseTestClass
 	});
 
 	[TestMethod]
-	[Timeout(120000)]
+	[Timeout(120000, CooperativeCancellation = true)]
 	public Task OrderBook() => RunAsync(async harness =>
 	{
 		if (!await IsSupportedAsync(harness, DataType.MarketDepth))
@@ -223,7 +227,7 @@ public abstract class LiveMarketDataTestBase : BaseTestClass
 	});
 
 	[TestMethod]
-	[Timeout(120000)]
+	[Timeout(120000, CooperativeCancellation = true)]
 	public Task Ticks() => RunAsync(async harness =>
 	{
 		if (!await IsSupportedAsync(harness, DataType.Ticks))
@@ -240,7 +244,7 @@ public abstract class LiveMarketDataTestBase : BaseTestClass
 	});
 
 	[TestMethod]
-	[Timeout(120000)]
+	[Timeout(120000, CooperativeCancellation = true)]
 	public Task Candles() => RunAsync(async harness =>
 	{
 		var tf = await GetTimeFrameAsync(harness);

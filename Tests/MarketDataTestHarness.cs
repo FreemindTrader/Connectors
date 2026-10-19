@@ -190,7 +190,7 @@ class MarketDataTestHarness : IAsyncDisposable
 		var interval = _adapter.HeartbeatInterval;
 
 		if (interval <= TimeSpan.Zero)
-			interval = TimeSpan.FromSeconds(1);
+			return;
 
 		try
 		{

@@ -19,6 +19,11 @@ jobs:
       STOCKSHARP_LIVE_TESTS: '1'
       ALPHAVANTAGE_TOKEN: ${{ secrets.ALPHAVANTAGE_TOKEN }}
       POLYGON_TOKEN: ${{ secrets.POLYGON_TOKEN }}
+      ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
+      ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
+      STOCKSHARP_METAAPI_TOKEN: ${{ secrets.STOCKSHARP_METAAPI_TOKEN }}
+      STOCKSHARP_METAAPI_ACCOUNT: ${{ secrets.STOCKSHARP_METAAPI_ACCOUNT }}
+      STOCKSHARP_STOCKSTRADER_TOKEN: ${{ secrets.STOCKSHARP_STOCKSTRADER_TOKEN }}
 
     steps:
       # The connector projects import "../StockSharp (GitHub)/props/common_target_net.props", so both
@@ -56,6 +61,7 @@ jobs:
           --filter "TestCategory=Integration"
           --logger "trx;LogFileName=live-tests.trx"
           --results-directory TestResults
+          --blame-hang-timeout 3m
           -- MSTest.Parallelize.Workers=1
 
       - name: Upload test results
