@@ -34,7 +34,7 @@ partial class AlphaVantageMessageAdapter
 		if (Token.IsEmpty())
 			throw new InvalidOperationException(LocalizedStrings.TokenNotSpecified);
 
-		_alphaClient = new(QueryEndpoint) { Parent = this };
+		_alphaClient = new(QueryEndpoint, IterationInterval) { Parent = this };
 
 		return base.ConnectAsync(msg, token);
 	}

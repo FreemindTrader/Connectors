@@ -24,10 +24,13 @@ using StockSharp.Messages;
 class AlphaClient : BaseLogReceiver
 {
 	private readonly Uri _baseUrl;
+	private readonly TimeSpan _requestInterval;
+	private static readonly SemaphoreSlim _requestGate = new(1, 1);
 
-	public AlphaClient(string endpoint)
+	public AlphaClient(string endpoint, TimeSpan requestInterval)
 	{
 		_baseUrl = endpoint.ThrowIfEmpty(nameof(endpoint)).To<Uri>();
+		_requestInterval = requestInterval >= TimeSpan.Zero ? requestInterval : throw new ArgumentOutOfRangeException(nameof(requestInterval));
 	}
 
 	///// <summary>
@@ -231,9 +234,6 @@ class AlphaClient : BaseLogReceiver
 
 		var property = response.Properties().Last();
 
-		if (property.Name.EqualsIgnoreCase("information"))
-			throw new InvalidOperationException(property.Value.To<string>());
-
 		foreach (JProperty prop in property.Value)
 		{
 			var obj = (JObject)prop.Value;
@@ -278,10 +278,14 @@ class AlphaClient : BaseLogReceiver
 
 		if (((JToken)obj).Type == JTokenType.Object)
 		{
+			var body = (JObject)obj;
+			var error = (string)body["Error Message"] ?? (string)body["Information"] ?? (string)body["Note"];
+
+			if (!error.IsEmpty())
+				throw new InvalidOperationException(error);
+
 			if ((obj.success != null && obj.success == false) || (obj.code != null && (int)obj.code != 0))
 				throw new InvalidOperationException((string)obj.msg);
-			else if (((JObject)obj).Property("Error Message") != null)
-				throw new InvalidOperationException((string)((JObject)obj).Property("Error Message"));
 		}
 
 		return ((JToken)obj).DeserializeObject<T>();
@@ -292,18 +296,28 @@ class AlphaClient : BaseLogReceiver
 		request.Resource = url.IsAbsoluteUri ? url.AbsoluteUri : url.OriginalString;
 		this.AddVerboseLog("Request {0}, '{1}' Args '{2}'.", request.Method, url, request.Parameters.ToQueryString(false));
 
-		var client = new RestClient(new RestClientOptions
+		await _requestGate.WaitAsync(token);
+		try
 		{
-			UserAgent = nameof(StockSharp),
-		});
+			await _requestInterval.Delay(token);
 
-		var response = await client.ExecuteAsync(request, token);
+			using var client = new RestClient(new RestClientOptions
+			{
+				UserAgent = nameof(StockSharp),
+			});
 
-		this.AddVerboseLog("Response code {0}.", response.StatusCode);
+			var response = await client.ExecuteAsync(request, token);
 
-		if (response.StatusCode != HttpStatusCode.OK || response.Content.IsEmpty())
-			throw response.ToError();
+			this.AddVerboseLog("Response code {0}.", response.StatusCode);
 
-		return response.Content;
+			if (response.StatusCode != HttpStatusCode.OK || response.Content.IsEmpty())
+				throw response.ToError();
+
+			return response.Content;
+		}
+		finally
+		{
+			_requestGate.Release();
+		}
 	}
 }
